@@ -4,6 +4,8 @@ from keras.models import load_model
 import pickle
 from keras.preprocessing.sequence import pad_sequences
 import numpy as np
+import gc
+import tensorflow as tf
 
 app = Flask(__name__)
 
@@ -90,19 +92,16 @@ substituicoes = {
     r'\bmais agil\b': 'mais ágil'
 }
 
-def carregar_modelo_e_tokenizer():
-    model = load_model("files/sentiment_model.h5")  # Caminho para o modelo treinado
-    with open("files/tokenizer.pkl", "rb") as f:
-        tokenizer = pickle.load(f)
-    with open("files/label_encoder.pkl", "rb") as f:
-        label_encoder = pickle.load(f)
-    
-    if not model or not tokenizer or not label_encoder:
-        raise ValueError("Erro ao carregar modelo, tokenizer ou label_encoder. Verifique os arquivos!")
-    
-    return model, tokenizer, label_encoder
+# Carregando o modelo
+model = load_model("files/sentiment_model.h5")
+with open("files/tokenizer.pkl", "rb") as f:
+    tokenizer = pickle.load(f)
+with open("files/label_encoder.pkl", "rb") as f:
+    label_encoder = pickle.load(f)
+
 
 def substituir_termos(texto):
+    texto = texto[:1000]  # Limite para evitar uso excessivo de memória
     for termo, substituto in substituicoes.items():
         texto = re.sub(termo, substituto, texto, flags=re.IGNORECASE)
     return texto
@@ -137,10 +136,18 @@ def predict():
         if not texto:
             return jsonify({"error": "Texto não fornecido"}), 400
 
-        model, tokenizer, label_encoder = carregar_modelo_e_tokenizer()
-        predicoes_codificadas = testar_comentarios(texto, model, tokenizer)
-        sentimentos = mapear_sentimento(predicoes_codificadas, label_encoder)
-        
+        # Processamento
+        texto_processado = substituir_termos(texto)
+        X_novos_comentarios = tokenizer.texts_to_sequences([texto_processado])
+        X_novos_comentarios = pad_sequences(X_novos_comentarios, maxlen=50, padding='post')
+
+        predicoes = model.predict(X_novos_comentarios)
+        y_pred = np.argmax(predicoes, axis=1)
+        sentimentos = label_encoder.inverse_transform(y_pred)
+
+        # Libere memória
+        gc.collect()
+
         return jsonify({"sentimentos": sentimentos.tolist()})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
