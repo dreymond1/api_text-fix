@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import re
 import numpy as np
 import gc
-
+import logging
 
 app = Flask(__name__)
 
