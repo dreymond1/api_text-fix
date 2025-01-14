@@ -1,11 +1,8 @@
 from flask import Flask, request, jsonify
 import re
-from keras.models import load_model
-import pickle
-from keras.preprocessing.sequence import pad_sequences
 import numpy as np
 import gc
-import tensorflow as tf
+
 
 app = Flask(__name__)
 
