@@ -92,49 +92,12 @@ substituicoes = {
     r'\bmais agil\b': 'mais ágil'
 }
 
-# Carregando o modelo TensorFlow Lite
-interpreter = tf.lite.Interpreter(model_path="files/sentiment_model.tflite")
-interpreter.allocate_tensors()
-
-# Carregando o Tokenizer e o LabelEncoder
-with open("files/tokenizer.pkl", "rb") as f:
-    tokenizer = pickle.load(f)
-with open("files/label_encoder.pkl", "rb") as f:
-    label_encoder = pickle.load(f)
-
 def substituir_termos(texto):
     texto = texto[:1000]  # Limite para evitar uso excessivo de memória
-    substituicoes = {}  # Defina seu dicionário de substituições aqui
     for termo, substituto in substituicoes.items():
         texto = re.sub(termo, substituto, texto, flags=re.IGNORECASE)
     return texto
 
-def processar_em_lote(textos, tokenizer, model, label_encoder, max_len_contexto=50, batch_size=32):
-    resultados = []
-    
-    # Processando os dados em lotes
-    for i in range(0, len(textos), batch_size):
-        lote = textos[i:i + batch_size]
-        
-        # Substituição de termos nos textos
-        lote_processado = [substituir_termos(texto) for texto in lote]
-        
-        # Tokenização dos comentários da coluna
-        X_novos_comentarios = tokenizer.texts_to_sequences(lote_processado)
-        
-        # Padding para garantir o mesmo tamanho
-        X_novos_comentarios = pad_sequences(X_novos_comentarios, maxlen=max_len_contexto, padding='post')
-        
-        # Previsão
-        predicoes = model.predict(X_novos_comentarios)
-        
-        # Decodificar as previsões
-        y_pred = np.argmax(predicoes, axis=1)  # Pega a classe com maior probabilidade
-        sentimentos = label_encoder.inverse_transform(y_pred)
-        
-        resultados.extend(sentimentos.tolist())
-    
-    return resultados
 
 @app.route("/", methods=["POST"])
 def predict():
@@ -146,14 +109,13 @@ def predict():
 
         # Processamento
         textos = [texto]  # Para o caso de ser um único texto, podemos colocar em uma lista
-        resultados = processar_em_lote(textos, tokenizer, model, label_encoder, batch_size=32)
-
+        resultados = substituir_termos(textos)
         # Libere memória
         gc.collect()
 
-        return jsonify({"sentimentos": resultados})
+        return resultados
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return e
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
