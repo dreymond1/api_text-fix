@@ -89,6 +89,8 @@ substituicoes = {
     r'\bmais agil\b': 'mais ágil'
 }
 
+logging.basicConfig(level=logging.DEBUG)
+
 def substituir_termos(texto):
     texto = texto[:1000]  # Limite para evitar uso excessivo de memória
     for termo, substituto in substituicoes.items():
@@ -101,18 +103,27 @@ def predict():
     try:
         dados = request.json
         texto = dados.get("texto", "")
+        
+        # Log para ver o que estamos recebendo
+        app.logger.debug(f"Texto recebido: {texto}")
+
         if not texto:
+            app.logger.error("Texto não fornecido.")
             return jsonify({"error": "Texto não fornecido"}), 400
 
         # Processamento
         textos = [texto]  # Para o caso de ser um único texto, podemos colocar em uma lista
-        resultados = substituir_termos(textos)
+        resultados = [substituir_termos(t) for t in textos]  # Aplica substituições para cada texto
+        app.logger.debug(f"Texto após substituições: {resultados}")
+
         # Libere memória
         gc.collect()
 
-        return resultados
+        return jsonify(resultados)  # Retorna como lista de textos processados
     except Exception as e:
-        return e
+        # Log de erro detalhado
+        app.logger.error(f"Erro ao processar o texto: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
