@@ -92,41 +92,53 @@ substituicoes = {
     r'\bmais agil\b': 'mais ágil'
 }
 
-# Carregando o modelo
-model = load_model("files/sentiment_model.h5")
+# Carregando o modelo TensorFlow Lite
+interpreter = tf.lite.Interpreter(model_path="files/sentiment_model.tflite")
+interpreter.allocate_tensors()
+
+# Carregando o Tokenizer e o LabelEncoder
 with open("files/tokenizer.pkl", "rb") as f:
     tokenizer = pickle.load(f)
 with open("files/label_encoder.pkl", "rb") as f:
     label_encoder = pickle.load(f)
 
-
 def substituir_termos(texto):
     texto = texto[:1000]  # Limite para evitar uso excessivo de memória
+    substituicoes = {}  # Defina seu dicionário de substituições aqui
     for termo, substituto in substituicoes.items():
         texto = re.sub(termo, substituto, texto, flags=re.IGNORECASE)
     return texto
 
-def testar_comentarios_dataframe(texto, model, tokenizer, max_len_contexto=50):
-    
+def testar_comentarios_dataframe(texto, tokenizer, max_len_contexto=50):
     data_base = substituir_termos(texto)
     
     # Tokenização dos comentários da coluna
-    X_novos_comentarios = tokenizer.texts_to_sequences(data_base.tolist())
+    X_novos_comentarios = tokenizer.texts_to_sequences([data_base])
     
     # Padding para garantir o mesmo tamanho
     X_novos_comentarios = pad_sequences(X_novos_comentarios, maxlen=max_len_contexto, padding='post')
     
-    # Previsão
-    predicoes = model.predict(X_novos_comentarios)
-    
-    # Decodificar as previsões
-    y_pred = np.argmax(predicoes, axis=1)  # Pega a classe com maior probabilidade
-    return y_pred
+    return X_novos_comentarios
 
 # Função para mapear a previsão de volta ao sentimento original
 def mapear_sentimento(predicoes_codificadas, label_encoder):
     sentimentos_preditos = label_encoder.inverse_transform(predicoes_codificadas)
     return sentimentos_preditos
+
+def fazer_previsao(model_interpreter, input_data):
+    input_details = model_interpreter.get_input_details()
+    output_details = model_interpreter.get_output_details()
+
+    # Atribuindo dados de entrada para o modelo
+    model_interpreter.set_tensor(input_details[0]['index'], input_data)
+    
+    # Executando a previsão
+    model_interpreter.invoke()
+    
+    # Pegando a previsão
+    output_data = model_interpreter.get_tensor(output_details[0]['index'])
+    
+    return output_data
 
 @app.route("/", methods=["POST"])
 def predict():
@@ -141,11 +153,19 @@ def predict():
         X_novos_comentarios = tokenizer.texts_to_sequences([texto_processado])
         X_novos_comentarios = pad_sequences(X_novos_comentarios, maxlen=50, padding='post')
 
-        predicoes = model.predict(X_novos_comentarios)
+        # Convertendo para o formato correto do TensorFlow Lite (uint8 ou float32)
+        X_novos_comentarios = np.array(X_novos_comentarios, dtype=np.int32)
+
+        # Fazer previsão
+        predicoes = fazer_previsao(interpreter, X_novos_comentarios)
+
+        # Pegar a classe com maior probabilidade
         y_pred = np.argmax(predicoes, axis=1)
+
+        # Mapear a previsão para o sentimento
         sentimentos = label_encoder.inverse_transform(y_pred)
 
-        # Libere memória
+        # Liberar memória
         gc.collect()
 
         return jsonify({"sentimentos": sentimentos.tolist()})
