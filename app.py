@@ -129,7 +129,7 @@ def mapear_sentimento(predicoes_codificadas, label_encoder):
     sentimentos_preditos = label_encoder.inverse_transform(predicoes_codificadas)
     return sentimentos_preditos
 
-@app.route("/")
+@app.route("/", methods=["POST"])
 def predict():
     try:
         dados = request.json
@@ -144,3 +144,6 @@ def predict():
         return jsonify({"sentimentos": sentimentos.tolist()})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
